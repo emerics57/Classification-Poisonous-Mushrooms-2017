@@ -1,0 +1,694 @@
+---
+title: "Gambling With Nature's Probabilities: A Classification Analysis On Whether Mushrooms Are Poisonous Or Edible"
+author: "Emeric Szaboky (PSTAT 231 Data Mining)"
+date: "6/14/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+
+In this research study, two important questions regarding a dataset on wild mushrooms are addressed. The first question, a supervised learning problem, is whether or not a mushroom (observation) can be accurately classified according to the specific attributes collected in the dataset. The classification analysis is completed using two data mining classification techniques, Random Forest and Logistic Regression. The second question addressed in this study, an unsupervised learning problem, is whether or not categorical clustering methods can accurately group the collection of mushroom observations into clusters revealing their species and familial groupings. For the exploration of this question, two clustering methods have been chosen: ROCK (RObust Clustering using linKs) Algorithm and K-Modes (a modification of K-Means clustering method created for clustering categorical data). K-Modes has not yet been implemented, but will later be added to the report. In addition to the supervised and unsupervised learning analyses, Exploratory Data Analysis (EDA) and visualizations are also used in disecting the dataset and sifting out meaningful information. 
+
+The results of both the Random Forest Classification and the Logistic Regression Classifications were 100% accurate with zero percent error rate. This suggests that the attributes available in the dataset are virtually perfect predictors of class. This combination of attributes are shown to have very accurate predictive power. The covariates odor and spore.print.color were shown through the Random Forest Variable Importance Plot and EDA to be the most significant predictors. In combination, they were able to perfectly classify all mushrooms except for odorless mushrooms with a white spore print. The intuitive ROCK Algorithm for clustering with categorical attributes resulted in 21 clusters, 20 of which were pure clusters, in which all observations are either poisonous or edible. There was one mixed cluster, and a number of observations which were not part of a cluster. In analyzing the 21 clusters found, there is significant possibility that these 21 clusters represent 21 of the 23 documented mushroom species, the unclustered observations belonging to the final two species which are indistinguishable. 
+
+# Introduction 
+
+This study, Gambling With Nature's Probabilities: A Classification Analysis On Whether Mushrooms Are Poisonous Or Edible, documents a classification analysis performed on a dataset about wild mushrooms from the University of California Irvine Machine Learning Repository. The dataset, called the "Mushroom Data Set," consists of 8124 observations (hypothetical samples) of mushroom sightings. The observations are sourced originally from The Audubon Society Field Guide to North American Mushrooms (1981). G. H. Lincoff (Pres.), New York: Alfred A. Knopf. The samples correspond to repetitions of 23 different mushroom species within either the Agaricus or Lepiota Families. The observations do not have Family grouping or species as documented attributes; it is unspecified which mushrooms belong to which groupings. 
+
+In the original dataset, the class variable had four class levels: definitely edible, definitely poisonous, unknown edibility, or not recommended. The latter two class levels, however, were combined with the poisonous class, making the class variable binary in factor level: edible or poisonous. This intruiging dataset offers much unique knowledge regarding the nature and tendencies of wild mushrooms (and other fungi). With deep exploration, the data scientist is able to learn how to fairly accurately identify edible mushrooms, a first foot into the world of mycology and mushroom hunting. Although this guide may be a helpful resource and introduction to the understanding of fungi, it is not meant to be a simple rubric for the application of determining mushroom edibility. There will always be risk incorporated in ingestion of wild mushrooms. 
+
+The main problem in this study is a classification problem using the dataset's 23 attributes on whether the documented mushrooms are poisonous or edible. The methods used to approach this problem are Random Forest Classification and Logistic Regression Classification, as discussed in the Abstract. The secondhand problem focuses on finding clusters of observations that represent groupings based on mushroom species or Family. The categorical clustering method ROCK Algorithm is used in the investigation of this problem. Another categorical clustering method, K-Modes will be implemented later on. Both forms of classification analysis revealed that the covariate attributes in the dataset were perfect predictors of class. The ROCK Algorithm synthesized 21 clusters, 20 of which were pure clusters (either all poisonous or all edible). These 21 clusters could potentially be groupings aligning with the 23 documented species in the dataset. It also left 127 observations unclustered; these observations are indistinguishable or unable to be grouped with the conceptual linkage methods used in the ROCK Algorithm. Perhaps, these unclustered observations are the ambiguous odorless white spore print mushrooms which had so much difficulty being classified in the classification analysis.
+
+Software programs R, R-Studio, and R Markdown were utilized for the compilation of this report. The packages installed for the completion of this study include plyr, dplyr, ggplot2, caret, randomForest, readr, caTools, rpart.plot, ROCR, class, tree, pROC, cba, and klaR. The following report will include important code excerpts used to run supervised and unsupervised learning analyses, documentation and mechanisms of machine learning methods, in-depth analysis of methods and results, documentation of unique findings discovered through EDA, insightful visualizations with intent of easy digestion of the meaning in the data, model selection techniques, and the overarching conclusion. 
+
+# Wild Mushroom Dataset Characteristics 
+
+Attributes: 23 
+
+
+Observations: 8124 
+
+
+Families: Agaricus, Lepiota
+
+
+Number of Species Documented: 23
+
+
+Binary Class Variable: class(poisonous, edible)
+
+# Pre-processing
+
+## Libraries Utilized
+
+```{r, results='hide'}
+library(plyr)
+library(dplyr)
+library(ggplot2) # beautiful plots 
+library(caret)  # shortcut analysis methods
+library(randomForest)  # random Forest analysis 
+library(readr) # CSV file I/O, e.g. the read_csv function
+library(caTools)   # For stratified split
+library(rpart.plot)
+library(ROCR) # ROC curves
+library(class)
+library(tree)
+library(pROC) # ROC curves
+library(cba)  # package for ROCK clustering algorithm
+library(klaR) # package for K-Modes categorical clustering 
+```
+
+## Read In Data As "mush" / Create Copy Of Dataframe "mush.desc" As Descriptive Reference (Running Certain Analysis Methods On Dataset With Detailed Descriptors Required Significant RAM And Crashes R-Studio)
+
+```{r}
+# Read in csv file as a data frame
+mush = read.csv('mushrooms.csv')
+
+# Make copy of dataframe labeled "mush.desc"; this will be our descriptive dataset for use in visualizations (to incorporate accurate labeling)
+mush.desc <- mush
+```
+
+## Make Duplicate Dataframe "mush.desc" More Descriptive: Convert Shorthand Symbolic Labeling To True Descriptive Labeling
+
+```{r}
+### Make Data Frame More Descriptive (check mush.desc for description reference)
+
+#_________________________________________________________________________________________________________________________________________________________________________
+
+# Alter Class Labels, more descriptive: edible; poisonous
+mush.desc$class <- revalue(mush$class, c("e"="edible", "p"="poisonous"))
+
+# Alter cap.shape Attribute (using plyr function revalue)
+mush.desc$cap.shape <- revalue(mush$cap.shape, c("b"="bell", "c"="conical", "x"="convex", "f"="flat", "k"="knobbed", "s"="sunken"))
+
+# Alter cap.surface Attribute
+mush.desc$cap.surface <- revalue(mush$cap.surface, c("f"="fibrous", "g"="grooves", "y"="scaly", "s"="smooth"))
+
+# Alter cap.color Attribute
+mush.desc$cap.color <- revalue(mush$cap.color, c("n"="brown", "b"="buff", "c"="cinnamon", "g"="gray", "r"="green", "p"="pink", "u"="purple", "e"="red", "w"="white", "y"="yellow"))
+
+# Alter bruises Attribute (binary factor covariate)
+mush.desc$bruises <- revalue(mush$bruises, c("t"="bruises", "f"="none"))
+
+# Alter odor Attribute
+mush.desc$odor <- revalue(mush$odor, c("a"="almond", "l"="anise", "c"="creosote", "y"="fishy", "f"="foul", "m"="musty", "n"="none", "p"="pungent", "s"="spicy"))
+
+# Alter gill.attachment Attribute; "notched", "descending" not present
+mush.desc$gill.attachment <- revalue(mush$gill.attachment, c("a"="attached", "f"="free","n"="notched","d"="descending"))
+
+# Alter gill.spacing Attribute; "distant" not present
+mush.desc$gill.spacing <- revalue(mush$gill.spacing, c("w"="crowded", "c"="close","d"="distant"))
+
+# Alter gill.size Attribute (binary factor covariate)
+mush.desc$gill.size <- revalue(mush$gill.size, c("b"="broad", "n"="narrow"))
+
+# Alter gill.color Attribute
+mush.desc$gill.color <- revalue(mush$gill.color, c("k"="black", "n"="brown", "b"="buff", "h"="chocolate", "g"="gray", "r"="green", "o"="orange", "p"="pink", "u"="purple", "e"="red", "w"="white", "y"="yellow"))
+
+# Alter stalk.shape Attribute (binary factor covariate)
+mush.desc$stalk.shape <- ifelse(mush$stalk.shape == "e","enlarging","tapering")
+
+# Alter stalk.root Attribute; "cup", "rhizomporphs" not present
+## missing vals -> labeled as factor level undocumented
+mush.desc$stalk.root <- revalue(mush$stalk.root, c("b"="bulbous", "c"="club", "u"="cup", "e"="equal", "z"="rhizomorphs", "r"="rooted", "?"="undocumented"))
+
+# Alter stalk.surface.above.ring Attribute
+mush.desc$stalk.surface.above.ring <- revalue(mush$stalk.surface.above.ring, c("f"="fibrous", "y"="scaly", "k"="silky", "s"="smooth"))
+
+# Alter stalk.surface.below.ring Attribute
+mush.desc$stalk.surface.below.ring <- revalue(mush$stalk.surface.below.ring, c("f"="fibrous", "y"="scaly", "k"="silky", "s"="smooth"))
+
+# Alter stalk.color.above.ring Attribute
+mush.desc$stalk.color.above.ring <- revalue(mush$stalk.color.above.ring, c("n"="brown", "b"="buff", "c"="cinnamon", "g"="gray", "o"="orange", "p"="pink", "e"="red", "w"="white", "y"="yellow"))
+
+# Alter stalk.color.below.ring Attribute
+mush.desc$stalk.color.below.ring <- revalue(mush$stalk.color.below.ring, c("n"="brown", "b"="buff", "c"="cinnamon", "g"="gray", "o"="orange", "p"="pink", "e"="red", "w"="white", "y"="yellow"))
+
+# Alter veil.type Attribute (binary factor covariate); "universal" not present
+mush.desc$veil.type <- revalue(mush$veil.type, c("p"="partial", "u"="universal"))
+
+# Alter veil.color Attribute
+mush.desc$veil.color <- revalue(mush$veil.color, c("n"="brown", "o"="orange", "w"="white", "y"="yellow"))
+
+# Alter ring.number Attribute
+mush.desc$ring.number <- revalue(mush$ring.number, c("n"="none", "o"="one", "t"="two"))
+
+# Alter ring.type Attribute; "cobwebby", "sheathing", "zone" not present
+mush.desc$ring.type <- revalue(mush$ring.type, c("c"="cobwebby", "e"="evanescent", "f"="flaring", "l"="large", "n"="none", "p"="pendant", "s"="sheathing", "z"="zone"))
+
+# Alter spore.print.color Attribute
+mush.desc$spore.print.color <- revalue(mush$spore.print.color, c("k"="black", "n"="brown", "b"="buff", "h"="chocolate", "r"="green", "o"="orange", "u"="purple", "w"="white", "y"="yellow"))
+
+# Alter population Attribute
+mush.desc$population <- revalue(mush$population, c("a"="abundant", "c"="clustered", "n"="numerous", "s"="scattered", "v"="several", "y"="solitary"))
+
+# Alter habitat Attribute
+mush.desc$habitat <- revalue(mush$habitat, c("g"="grasses", "l"="leaves", "m"="meadows", "p"="paths", "u"="urban", "w"="waste", "d"="woods"))
+
+#_________________________________________________________________________________________________________________________________________________________________________
+```
+
+Missing values for the stalk.root attribute, originally labeled "?", were made to be their own factor level named "undocumented." Error messages are due to attribute factor levels with 0 observations in them. 
+
+### Descriptive Dataframe Preview: "mush.desc"
+
+```{r}
+# Dataframe Preview
+mush.desc[1:15,]  # print first 15 rows of mush.desc
+```
+
+This alternate dataframe can be used for descriptively labeled visualizations. 
+
+## Exploratory Data Analysis Part 1: Disecting The Data (Part Of Pre-processing)
+
+### Statistical Summary Of Mushroom Dataset
+
+```{r}
+# Summarize Data
+summary(mush.desc)  # Tally Summary of Number of Mushrooms In Each Factor Level of Each Covariate/Attribute  
+```
+
+### Number Of Factor Levels In Each Of The 23 Attributes
+
+```{r}
+# Print Number of Factor Levels (possible unique values) for Each Covariate
+apply(mush.desc, 2, function(x) length(unique(x)))
+```
+
+From the output, we can see that the attribute veil.type has only one factor level. Because it's value is uniform (singular) for all observations (not binary or multi-level), veil.type is not a valuable predictor. It is unchanging and therefore irrelevant to the class (Y covariate) prediction. This attribute can be dropped from the dataset. 
+
+#### Nullify/Delete veil.type Attribute (on "mush" dataset, our dataset for analysis)
+
+```{r}
+# Nullify/delete veil.type (on original dataset mush) Variable 
+# Since It Is Uniform (1 factor level) For All Mushrooms (it will not be a useful predictor)
+mush$veil.type <- NULL
+```   
+
+### Display Number Of Variables And Observations 
+
+```{r}
+# Print Number of Variables/Observations 
+ncol(mush)        # 22 variables (23 before veil.type was removed)
+nrow(mush)        # 8124 observations 
+```
+
+There were originally 23 attributes (covariates). After removing veil.type, there are 22 existing attributes in the "mush" dataframe. There are 8124 observations. 
+
+### Quanitify And Display Class (Y, Response: Poisonous, Edible) Distribution For Each Covariate Factor Level
+
+```{r}
+# DIY variable/factor-level importance measurement: 
+# allows us to see # edible, or # poisonous 
+# per each factor level of each attribute(predictor)
+mush.table <- lapply(seq(from=2, to=ncol(mush.desc)), 
+                         function(x) {table(mush.desc$class, mush.desc[,x])})
+names(mush.table) <- colnames(mush.desc)[2:ncol(mush.desc)]
+
+for(i in 1:length(mush.table)) {
+    print("_______________________")
+    print(names(mush.table)[i])
+    print(mush.table[[i]]) 
+}
+```
+
+**Fairly Accurate Rules (Correlations) Discovered:**
+
+1. cap.shape 
+
+- If cap.shape == knobbed, then mushrooms are more likely to be poisonous.
+- If cap.shape == conical, then mushrooms are all poisonous. This rule is not very accurate, as there is a small sample of mushrooms with conical cap.shape in the dataset. 
+- If cap.shape == sunken, then mushrooms are all edible. This rule is not very accurate, as there is a small sample of mushrooms with sunken cap.shape in the dataset. 
+- If cap.shape == bell, then mushrooms are significantly more likely to be edible. A mushroom hunter should proceed with caution; however, the odds are in their favor. 
+
+2. cap.surface
+
+- If cap.surface == fibrous, then mushrooms are more likely to be edible. 
+- If cap.surface == grooves, then mushrooms are all poisonous. This rule is not very accurate, as there is a small sample of mushrooms with grooved cap.surface in the dataset.  
+
+3. cap.color
+
+- If cap.color == buff, then mushrooms are slightly more likely to be poisonous.
+- If cap.color == green, then mushrooms are all poisonous. This rule is not very accurate, as there is a small sample of mushrooms with green cap.color in the dataset.  
+- If cap.color == white, then mushrooms are slightly more likely to be edible. 
+- If cap.color == red and class == poisonous, then mushroom could potentially be an Amanita Muscaria mushroom (a poisonous psychoactive species in the Agaricus family). The existence of this species of mushroom is rumored to have inspired Santa Claus folklore.  
+
+4. bruises
+
+- If bruises == bruises, then mushrooms are significantly more likely to be edible. 
+- If brusies == none, then mushrooms are more likely to be poisonous. 
+
+5. odor: A strong predictor of class; the odors correlated with poison are very logical. This draws an interesting perspective on smell and our evolutionary sensory decision-making to avoid things with "bad" or "unfavorable" smells. All "unfavorable" odors are completely correlated with the poisonous class. 
+
+- If odor == almond, then all mushrooms documented are edible.
+- If odor == creosote, then all mushrooms documented are poisonous.
+- If odor == foul, then all mushrooms documented are poisonous. 
+- If odor == anise, then all mushrooms documented are edible. 
+- If odor == musty, then all mushrooms documented are poisonous. 
+- If odor == none, then mushrooms are much more likely to be edible.
+- If odor == pungent, then all mushrooms documented are poisonous. 
+- If odor == spicy, then all mushrooms documented are poisonous. 
+- If odor == fishy, then all mushrooms documented are poisonous.  
+
+6. gill.attachment 
+
+- If gill.attachment == attached, then mushrooms are very slightly more likely to be edible (however, there are not enough observations to accurately claim) [class imbalance]
+
+7. gill.spacing
+
+- If gill.spacing == crowded, then mushrooms are significantly more likely to be edible. 
+
+8. gill.size
+
+- If gill.size == broad, then mushrooms are more likely to be edible. Mushrooms collectors must still proceed with caution. 
+- If gill.size == narrow, then mushrooms are significantly more likely to be poisonous. 
+
+9. gill.color 
+
+- If gill.color == buff, then all mushrooms documented are poisonous. 
+- If gill.color == red, then all mushrooms documented are edible.
+- If gill.color == gray || gill.color == chocolate, then mushrooms are slightly more likely to be poisonous.
+- If gill.color == black, then mushrooms are slightly more likely to be edible.
+- If gill.color == brown, then mushrooms are more likely to be edible. 
+- If gill.color == orange, then all mushrooms documented are edible.
+- If gill.color == green, then all mushrooms documented are poisonous
+- If gill.color == purple, then mushrooms are more likely to be edible.
+- If gill.color == white, then mushrooms are more likely to be edible. 
+
+10. stalk.shape
+
+- No significant correlations here. This predictor is not of large importance. 
+
+11. stalk.root
+
+- If stalk.root == club, then mushrooms are more likely to be edible.
+- If stalk.root == equal, then mushrooms are more likely to be edible. 
+- If stalk.root == rooted, then all mushrooms documented are edible. 
+- If stalk.root == undocumented, then mushrooms are more likely to be poisonous. 
+
+12. stalk.surface.above.ring
+
+- If stalk.surface.above.ring == silky, then mushrooms are significantly more likely to be poisonous. 
+- If stalk.surface.above.ring == smooth, then mushrooms are more likely to be edible.
+
+13. stalk.surface.below.ring
+
+- If stalk.surface.below.ring == silky, then mushrooms are significantly more likely to be poisonous. 
+- If stalk.surface.below.ring == smooth, then mushrooms are more likely to be edible.
+
+14. stalk.color.above.ring
+
+- If stalk.color.above.ring == buff, then all mushrooms documented are poisonous. 
+- If stalk.color.above.ring == cinnamon, then all mushrooms documented are poisonous. 
+- If stalk.color.above.ring == red, then all mushrooms documented are edible. 
+- If stalk.color.above.ring == gray, then all mushrooms documented are edible. 
+- If stalk.color.above.ring == brown, then mushrooms more likely to be poisonous. 
+- If stalk.color.above.ring == orange, then all mushrooms documented are edible. 
+- If stalk.color.above.ring == pink, then mushrooms are more likely to be poisonous. 
+- If stalk.color.above.ring == white, then mushrooms are more likely to be edible. Proceed with caution.  
+- If stalk.color.above.ring == yellow, then all mushrooms documented are poisonous. 
+
+15. stalk.color.below.ring
+
+- If stalk.color.below.ring == buff, then all mushrooms documented are poisonous. 
+- If stalk.color.below.ring == cinnamon, then all mushrooms documented are poisonous. 
+- If stalk.color.below.ring == red, then all mushrooms documented are edible. 
+- If stalk.color.below.ring == gray, then all mushrooms documented are edible. 
+- If stalk.color.below.ring == brown, then mushrooms more likely to be poisonous. 
+- If stalk.color.below.ring == orange, then all mushrooms documented are edible. 
+- If stalk.color.below.ring == pink, then mushrooms are more likely to be poisonous. 
+- If stalk.color.below.ring == white, then mushrooms are slightly more likely to be edible. Proceed with caution. 
+- If stalk.color.below.ring == yellow, then all mushrooms documented are poisonous. 
+
+16. veil.color
+
+- If veil.color == brown, then all mushrooms documented are edible. 
+- If veil.color == orange, then all mushrooms documented are edible. 
+- If veil.color == yellow, then all mushrooms documented are poisonous. 
+
+17. ring.number
+
+- If ring.number == none, then all mushrooms documented are poisonous. 
+- If ring.number == two, then mushrooms are more likely to be edible. 
+
+18. ring.type
+
+- If ring.type == evanescent, then mushrooms are slightly more likely to be poisonous.  
+- If ring.type == flaring, then all mushrooms documented are edible.
+- If ring.type == large, then all mushrooms documented are poisonous. 
+- If ring.type == none, then all mushrooms documented are poisonous. 
+- If ring.type == pendant, then mushrooms are more likely to be edible. 
+
+19. spore.print.color: A good predictor. 
+
+- If spore.print.color == buff, then all mushrooms documented are edible.
+- If spore.print.color == chocolate, then mushrooms are significantly more likely to be poisonous.
+- If spore.print.color == black, then mushrooms are significantly more likely to be edible.
+- If spore.print.color == brown, then mushrooms are significantly more likely to be edible.
+- If spore.print.color == orange, then all mushrooms documented are edible.
+- If spore.print.color == green, then all mushrooms documented are poisonous. 
+- If spore.print.color == purple, then all mushrooms documented are edible.
+- If spore.print.color == white, then mushrooms are much more likely to be poisonous.
+- If spore.print.color == yellow, then all mushrooms documented are edible.
+
+20. population
+
+- If population == abundant, then all mushrooms documented are edible.
+- If population == clustered, then mushrooms are more likely to be edible.
+- If population == numerous, then all mushrooms documented are edible.
+- If population == scattered, then mushrooms are slightly more likely to be edible.
+- If population == several, then mushrooms are more likely to be poisonous.
+- If population == solitary, then mushrooms are more likely to be edible. 
+
+21. habitat
+
+- If habitat == grasses, then mushrooms are more likely to be edible. 
+- If habitat == meadows, then mushrooms are more likely to be edible. 
+- If habitat == paths (trampled through nature), then mushrooms are significantly more likely to be poisonous. 
+- If habitat == urban, then mushrooms are more likely to be poisonous. 
+- If habitat == waste (feces), then all mushrooms documented are edible.
+
+# Classification (Supervised Learning)
+
+## Random Forest Classification 
+
+Details: Random Forest Classification is an ensemble learnig method, meaning it utilizes multiple learning algorithms to obtain more accurate predictons than those acquired by using only one algorithm. This method creates many decision trees (a "forest") using the specified training set. The class label outputted is decided by the mode (most common) of the classes or the mean prediction of of the individual trees.  
+
+Reasoning: I chose to use Random Forest rather than decision trees classification because Random Forest Classification protects against overfitting to the training set. In the mushroom dataset, there are many variables and most analysis methods utilizing all covariates will be prone to overfitting, in which weighting of covariates is too spread out in order to accurately determine covariate signficance. Random Forest is significantly more stable and robust as a method of analysis. Its Variable Importance Plot is also desirable and useful in the exploration of a categorical dataset. 
+
+### Manual Random Forest / ROC Curve 
+
+```{r}
+### Manual Random Forest for ROC Curve 
+set.seed(1)
+data <- sample(2, nrow(mush), replace = T, prob = c(0.7, 0.3))  # split data into test set and training set (ratio: 70% training, 30% test)
+traindata <- mush[data == 1,]
+testdata <- mush[data == 2,]
+
+# Tree functions
+varsTree <- class ~ cap.shape + cap.surface + cap.color + bruises + odor + gill.attachment + gill.spacing + gill.size + gill.color + stalk.shape + stalk.root + stalk.surface.above.ring + stalk.surface.below.ring + stalk.color.above.ring + stalk.color.below.ring + veil.color + ring.number + ring.type + spore.print.color + population + habitat
+
+# Applying the algorithm
+treeRF <- randomForest(varsTree, data = traindata, ntree=100, proximity = T)
+
+# Importance of each variable
+mush.imp <- varImpPlot(treeRF, main = "Importance of each variable")
+
+# Class Prediction Object / ROC Curve
+pred.rf = predict(treeRF, testdata, type="prob")
+pred.rf = prediction(pred.rf[,2], testdata$class)
+perf.rf = performance(pred.rf, measure="tpr", x.measure="fpr")
+plot(perf.rf, col=2, lwd=3, main="Mushroom Classification: ROC Curve for Random Forest")
+abline(0,1)
+```
+
+Analysis: 
+
+- The shape of the ROC curve illustrates a perfect class prediction with 0% error and 100% accuracy. 
+- The Variable Importance Plot produced by the manual Random Forest method specifies the top five most important variables to be odor, spore.print.color, gill.color, ring.type, and stalk.surface.above.ring. 
+
+### Alternate Random Forest Method Using Caret Package: Yields Preferred Variable Importance Plot 
+
+```{r}
+### More efficient/aesthetically-pleasing Random Forest Classification with cleaner Variable Importance Plot
+
+# Split data into test/training sets
+set.seed(101)
+diviz = sample.split(mush$class, SplitRatio = .7)  # 0.7 is the stratified split ratio of train to test
+table(diviz)
+
+mush.Xtrain = subset(mush, diviz == TRUE)       # create training subset of predictors (X)
+mush.Xtest = subset(mush, diviz == FALSE)       # create testing  subset of predictors (X)
+
+mush.Ytrain <- mush.Xtrain$class                #  create training Y vector
+mush.Ytest <- mush.Xtest$class                  #  create testing  Y vector
+
+mush.Xtrain$class <- NULL                       # nullify class vector so it can be re-predicted
+mush.Xtest$class <- NULL
+
+# Create a stratified sample for 10 fold repeated cross validation 
+CV.10fold <- createMultiFolds(mush.Ytrain, k=10, times=2)       # 2 repetitions 
+
+# Create a control object for repeated CV in caret
+mush.control <- trainControl(method="repeatedcv", number=10, repeats=2, index=CV.10fold)
+
+# Model 1: Random Forest Model 
+RFmush.cv <- train(x=mush.Xtrain, y=mush.Ytrain, method="rf", trControl=mush.control, tuneLength=3)
+# tuneLength = granularity/scale parameter 
+
+# Clean Variable Importance Plot
+plot(varImp(RFmush.cv), main = "Random Forest: Variable Importance Plot")
+
+# Class Prediction Object On Test Set
+mush.YpredictRF <- predict(RFmush.cv, mush.Xtest)
+
+# Accuracy Evaluation Dataframe
+acc.eval.rf <- data.frame(Orig = mush.Ytest, Pred = mush.YpredictRF)  # accuracy evaluation dataframe
+
+# Confusion Matrix (error rate = 0%, 100% accuracy)
+confusionMatrix(table(acc.eval.rf$Orig, acc.eval.rf$Pred))    
+
+# Random Forest: Variable Importance Plot confirms DIY variable/factor-level importance measurement 
+```
+
+Analysis: 
+
+- The confusion matrix for Random Forest Classification method using the caret package materials shows a 100% accuracy in classification and a 0% error rate. Let's investigate the cause of this perfect classification rate using EDA visualization.
+- Random Forest caret package shortcut method yields a Variable Importance Plot denoting the top five most important variables to be odor, spore.print.color, gill.color, gill.size, and ring.type. The plot is slightly different than the Variable Importance Plot created with the manual Random Forest method. This could be due a slight discontinuity between the two Random Forest algorithms. 
+
+### Class Prediction Results (Random Forest Method)
+
+### Exploratory Data Analysis Part 2: Thoughtful Visualizations (Inspired By Random Forest Classification)
+
+#### Plot Of odor vs. class 
+
+```{r}
+# Plot of odor against class using a ggplot geom_jitter shortcut
+odor.plot <- ggplot(mush.desc, aes(class, odor))
+odor.plot + geom_jitter(aes(color = class)) + scale_color_manual(values=c("palegreen3", "firebrick"))
+```
+
+Analysis:
+
+- It can be seen from the above visualization that the attribute odor nearly predicts all mushrooms classes except for those which are odorless. This single variable is the culprit behind the high accuracy in classification analysis. 
+- Mushrooms with odors "almond" and "anise" denote only edible mushrooms. According to the data, there is no risk associated with eating these mushrooms, if their smells can be properly identified. 
+- All unpleasant odors ("fishy", "spicy", "pungent", "musty", "foul", "creosote") are correlated only with poisonous mushrooms. According to the data, the risk in eating these mushrooms is 100%. 
+- Scent is a perfect predictor for classifying mushrooms as edible vs. poisonous, all except for odorless mushrooms, which are largely edible, but still in part poisonous (considerable risk). This makes an interesting statement about human cognition and sensory perception (sense of smell/taste particularly) being virtually a perfect predictor for classifying what to eat in nature. It might also be interesting to consider the evolutionary possiblity of humans having developed to perceive qualities of nature/food perfectly; even suggesting maybe a correlated evolution between humans and mushrooms. This essentially suggests that humans don’t need to be studying data on mushrooms at all; if one were to perform a proper sensory inspection of a fruiting body before putting it in our mouth or more importantly swallowing it, they would probably be okay. But the data is a beautiful validation of nature and human being's instinctual knowledge. 
+- Idealogical support for the concept of correlated evolution between mushrooms and other living creatures: mushrooms only produce their fruiting body to spread spores and reproduce. The mushroom is not the central component of the organism. It must be costly in energy for a mushroom to synthesize poison; why would a mushroom spend extra energy creating a poison to protect itself from being eaten? A plant may produce a poison to protect its own livelihood; if it is eaten, it dies. However, the process of mushrooms being eaten actually spreads spores and allows the organism to grow. The organism which lies beneath the ground is undisturbed when the fruiting body is eaten. This trend leaves us with no reasoning for the evolution of poison in mushrooms, unless they evolved to synthesize poison as a direct means of protection of an environment or combatting of an invasive species. This scenario would denote a correlated evolution. 
+
+#### Plot Of spore.print.color vs. class
+
+```{r}
+# Plot of spore.print.color against class using a ggplot geom_jitter shortcut
+spore.print.color.plot <- ggplot(mush.desc, aes(class, spore.print.color))
+spore.print.color.plot + geom_jitter(aes(color = spore.print.color)) + scale_color_manual(values=c("burlywood2","chocolate4","black","peru","darkorange1","darkolivegreen4","darkorchid","ivory","gold"))
+```
+
+Analysis:
+
+- According to the data, mushrooms with "buff", "orange", "purple", or "yellow" spore.print.color correspond only to edible mushrooms. 
+- Mushrooms with green spore.print.color correspond only to being poisonous. 
+
+#### Plot Of habitat vs. class
+
+```{r}
+# Plot of habitat against class using a ggplot geom_jitter shortcut
+habitat.plot <- ggplot(mush.desc, aes(class, habitat))
+habitat.plot + geom_jitter(aes(color = habitat)) + scale_color_manual(values=c("goldenrod4","yellowgreen","coral2","olivedrab1","lightgoldenrod3","lightskyblue4","coral4"))
+```
+
+Analysis: 
+
+- Mushrooms on paths and in urban places possess a strong correlation to being poisonous. This is interesting because paths and urban places are both places where human beings have intervened in nature. Could it be possible that the homeostatic tendencies of nature influence the production of poisonous mushrooms in specific areas as a form of protection, retaliation, or even rehabilitation of those environments. If so, the Earth is far more symbiotically intelligent that humans can even comprehend. 
+- This concept is supported by a colleague's research into psychoactive mushrooms. His research presented findings showing that mushrooms containing the psychoactive chemical psilocybin are more plentiful in areas where nature has been disturbed. I have not yet acquired the permission, but I will eventually reference his research in this study. This phenomenological correlation of psychoactive/poisonous mushrooms to disturbed natural environments could potentially be explained by a tendency of the Earth to control homeostasis, shift and manipulate environmental evolution, and rehabilitate its dying environments. In the case of psychoactive mushrooms, which produce mental experiences of oneness with and appreciation of nature, the Earth is producing purposeful objects which shift consciousness towards environmentalism and protection of the Earth and away from exploitation. This could also be considered a homeostatic rehabilitation.  
+- Another unique correlation is that mushrooms that grow on waste (feces) are classified as always edible. This denotes a fully self-contained and self-sustainable bioligical cycle, a feedback loop. There is no waste; everything is used. How is it that mushrooms know where they need to grow in order to coerce the decomposition of decaying bio-matter? This phenomenon is also a sign of a correlated evolution between humans and mushrooms. 
+
+#### Plot Of population vs. class
+
+```{r}
+# Plot of population against class using a ggplot geom_jitter shortcut
+population.plot <- ggplot(mush.desc, aes(class, population))
+population.plot + geom_jitter(aes(color = class)) + scale_color_manual(values=c("palegreen3", "firebrick"))
+```
+
+Analysis: 
+
+- Singular or more sparse populatons of mushrooms seem to possess a much higher correlation to being poisonous (although there are still some edible), whereas larger populations of mushrooms possess a high correlation to edibility. Observations labeled as having abundant and numerous populations are classified as only edible. Evolutionarily, this trend could relate to edible mushrooms evolving to reproduce in larger clusters as a food source. 
+
+#### Table: odor (Nested Under class) vs. spore.print.color
+
+```{r}
+# Plot table of odor (nested under class) against spore.print.color
+odor.class.spore.table <- table(mush.desc$class, mush.desc$odor, mush.desc$spore.print.color) 
+ftable(odor.class.spore.table)
+```
+
+Analysis:
+
+- Looking for values symmetrical across the center horizontal line of the table, we can see the only symmetrical (or same-scented-colored) value which lies under both edible and poisonous class levels is odorless white spore print mushrooms. With retaining only the two variables odor and spore.print.color, our model is virtually perfect at predicting class, except for those observations which are categorized as odorless and white spore print. 
+- In looking for the best model (simplest [least predictors] while still most explanatory), maybe it is possible to find a third covariate which in combination with odor and spore.print.color can rule out ambiguities for white spore print odorless mushrooms. 
+
+
+## Logistic Regression With Categorical Attributes Classification 
+
+Details: Logistic Regression is a regression model in which the response (dependent) variable is categorical, often binary as in the case of The Mushroom Dataset. The glm function automatically takes non-binary categorical multiple-factor-level variables and converts them into binary dummy variables in order to perform a logistic regression to predict the binary class level: i.e. veil.color --> brown(0,1), orange(0, 1), white(0, 1), yellow(0, 1). 
+
+Reasoning: I chose to use Logistic Regression because it works decently well with categorical attributes. It is also able to accurately determine covariate significance in models with only a few covariates. This allows us to use a model reduction process that we were unable to use in Random Forest Classification. The model reduction can allow us to iteratively simplify our model until we have a high accuracy classification with the minimum amount of covariates included. 
+
+### Full Model: Containing All Covariates
+
+```{r}
+### Manual Logistic Regression 
+
+# Full Model: Containing All Covariates 
+mush.glmz = glm(class ~ cap.shape + cap.surface + cap.color + bruises + odor + gill.attachment + gill.spacing + gill.size + gill.color + stalk.shape + stalk.root + stalk.surface.above.ring + stalk.surface.below.ring + stalk.color.above.ring + stalk.color.below.ring + veil.color + ring.number + ring.type + spore.print.color + population + habitat, data = mush, family = "binomial")
+# Class Prediction Object / ROC Curve Code
+pred.glm = predict(mush.glmz, mush, type="response")    # receive output of predicted probabilities
+pred.glm = prediction(pred.glm, mush$class)   # comparing predicted probabilities to true class labels
+perf.glm = performance(pred.glm, measure="tpr", x.measure="fpr")
+plot(perf.glm, col=2, lwd=3, main="Mushroom Classification: ROC Curve for Logistic Regression FM")
+abline(a = 0, b = 1)
+# Statistical Summary
+summary(mush.glmz)
+```
+
+Perfect class prediction; prone to overfitting. 
+
+#### Shortcut Logistic Regression Method Using Caret Library: Yields Logistic Regression Variable Importance Plot (Full Model)
+
+```{r}
+### Shortcut Logistic Regression Method Using Caret Library
+
+# Full Model: Containing All Covariates
+mush.glm <- train(x = mush.Xtrain, y = mush.Ytrain, method="glm", trControl = mush.control, family = "binomial")
+plot(varImp(mush.glm), main="Logistic Regression: Variable Importance Plot")
+
+# Class Prediction Object
+mush.YpredictGLM <- predict(mush.glm, mush.Xtest)
+
+# Accuracy Evaluation Dataframe
+acc.eval.glm <- data.frame(Orig = mush.Ytest,Pred = mush.YpredictGLM)
+
+# Confusion Matrix (error rate = 0%, 100% accuracy)
+confusionMatrix(table(acc.eval.glm$Orig, acc.eval.glm$Pred))      # 100% accuracy confirmed
+```
+
+### Reduced Model: Containing Top Five Covariates On Random Forest Variable Importance Plot 
+
+```{r}
+### Manual Logistic Regression 
+
+# Reduced Model: Containing Top 5 Covariates On Random Forest Variable Importance Plot 
+mush.glmRM = glm(class ~ odor + spore.print.color + gill.color + gill.size + ring.type, data = mush, family = "binomial")
+# Class Prediction Object / ROC Curve Code
+pred.glmRM = predict(mush.glmRM, mush, type="response")  # receive output of predicted probabilities
+pred.glmRM = prediction(pred.glmRM, mush$class)  # comparing predicted probabilities to true class labels
+perf.glmRM = performance(pred.glmRM, measure="tpr", x.measure="fpr")
+plot(perf.glm, col=2, lwd=3, main="Mushroom Classification: ROC Curve for Logistic Regression RM")
+abline(a = 0, b = 1)
+```
+
+The Reduced Model was chosen according to the top five variables on the Random Forest Variable Importance Plot (caret version). This is because the Logistic Regression Full Model is significantly prone to overfitting and its Variable Importance Plot is therefore not very trustworthy. 
+
+### Small Model: Containing Only Top Two Most Important Covariates, odor And spore.print.color
+
+```{r}
+### Manual Logistic Regression
+
+# Small Model: Containing Only Covariates odor And spore.print.color
+mush.glmS = glm(class ~ spore.print.color + odor, data = mush, family = "binomial")
+# Class Prediction Object / ROC Curve Code
+pred.glmS = predict(mush.glmS, mush, type="response")   # receive output of predicted probabilities
+pred.glmS = prediction(pred.glmS, mush$class) # comparing predicted probabilities to true class labels
+perf.glmS = performance(pred.glmS, measure="tpr", x.measure="fpr")
+plot(perf.glm, col=2, lwd=3, main="Mushroom Classification: ROC Curve for Logistic Regression SM")
+abline(a = 0, b = 1)
+```
+
+The Small Model utilizes only the top two variables on the Random Forest Variable Importance Plot, odor and spore.print.color. These are also the variables shown through EDA to be the strongest predictors. 
+
+### Class Prediction Results (Logistic Regression Method)
+
+All Logistic Regression models had near perfectly accurate class prediction. The Full Model has a perfect class prediction but is prone to overfitting. The other two models have a satisfactory class prediction accuracy for their small number of covariates. 
+
+# Model Assessment, Comparison and Selection
+
+```{r}
+# AUC for Random Forest and Logistic Regression Models
+auc = matrix(NA, nrow=1, ncol=4)
+colnames(auc) <- c("Random Forest", "Logistic Regression FM", "Logistic Regression RM", "Logistic Regression SM")
+
+auc.rf = performance(pred.rf, "auc")@y.values
+auc[,1] = auc.rf[[1]]
+auc.glm = performance(pred.glm, "auc")@y.values
+auc[1,2] = auc.glm[[1]]
+auc.glmRM = performance(pred.glmRM, "auc")@y.values
+auc[1,3] = auc.glmRM[[1]]
+auc.glmS = performance(pred.glmS, "auc")@y.values
+auc[1,4] = auc.glmS[[1]]
+
+auc
+```
+
+Analysis: 
+
+- The AUC (area under the ROC curve) values are very similar and are all close to 1, signifying a perfect or near perfect class prediction for all models. 
+- In order to select the best model, factors other than AUC must be taken into account. 
+- Based on the above AUC values and the Variable Importance Plots for Random Forest and Logistic Regression, I conclude the best model to be the Random Forest model. Although the AUCs for the Logistic Regression models are also favorable, the Variable Importance Plot for Logistic Regression is difficult to read because it is based on the Full Model containing all covariates; it also shows signs of overfitting. Because Logistic Regression splits each multiple-factor-level covariate into multiple binary covariates, the number of covariates incorporated in the Full Model can become very large, making it signficantly prone to overfitting. Classification can still be performed well, however, due to the wide spread of the weight distribution of the model on many covariates, this method has trouble deciding variable signficance unless it is reduced. The Random Forest model is most robust in incorporating all predictors.  
+- In case, of overfitting, I created two reduced Logistic Regression models, the Reduced Model and the Small Model. Out of the three Logistic Regression models, I would assume that one of the reduced models would be preferred to avoid potential overfitting since their AUC values are close enough to 1. The Small Model maintains an accurate AUC value of 0.9991611 with only the two covariates odor and spore.print.color. 
+
+# Clustering (Unsupervised Learning) 
+
+## Cluster Mushrooms Using ROCK Clustering (RObust Clustering using linKs) Algorithm 
+
+Details: ROCK Algorithm synthesizes clustered according to a dissimilarity measurement based on how many factor-levels each observation has in common with evey other observation (links).
+
+Reasoning: I chose this method in order to cluster categorical data with the hypothesis that I might be able to synthesize clusters representing the 23 species of mushrooms documented.  
+
+```{r}
+# Searching For Clusters By Species: 23 Species Documented in Dataset, 21 pure clusters discovered with ROCK algorithm 
+# 2 clusters/species indistinguishable (NA)
+
+set.seed(1)
+x <- as.dummy(mush[-1])
+mush.rc <- rockCluster(x[sample(dim(x)[1],1000),], n=10, theta=0.8)
+print(mush.rc)
+mush.pred <- predict(mush.rc, x)
+table(mush.desc$class, mush.pred$cl)
+
+# jitter plot of rock clustered class predictions vs. actual class values 
+rock.plot <- ggplot(mush.desc, aes(mush.desc$class, mush.pred$cl))
+rock.plot + geom_jitter(aes(color = class)) + scale_color_manual(values=c("palegreen3", "firebrick"))
+```
+
+Analysis:
+
+- The ROCK Algorithm synthesized 21 clusters, 20 of which were pure clusters (either all poisonous or all edible). These 21 clusters could potentially be groupings aligning with the 23 documented species in the dataset. It also left 127 observations unclustered; these observations are indistinguishable or unable to be grouped with the linkage methods used in the ROCK Algorithm. 
+
+It is possible that these unclustered observations are the ambiguous odorless white spore print mushrooms which had so much difficulty being classified in the classification analysis.
+
+# Clustering (K-Modes)
+
+Details: Not yet implemented. K-Modes is a variation of K-Means clustering algorithm designed for clustering with categorical covariates. It allows the user to specify cluster number.  
+
+Reasoning: I chose to use K-Modes clustering in order to cluster categorical covariates and specify two clusters with the hypothesis that I may find two clusters representing the mushroom Families, Agaricus and Lepiota. It is also possible and potentially likely that these clusters would have a stronger correlation to class level (poisonous, edible).
+
+
+# Conclusions
+
+After analysis and comparison, the best model was chosen to be the Random Forest model, with the runner-up being the Logistic Regression Small Model, which had a high accuracy of class prediction and AUC value with only the covariates odor and spore.print.color. Through the use of EDA and Random Forest method, there was some very unique and deep meaning considering the nature of fungi elaborated upon in the data. Odor is virtually a perfect predictor of edibility, suggesting that our brains and sense organs are virtually perfect predictors of mushroom class. Odor and spore.print.color together are able to classify all mushrooms except for odorless white mushrooms--making this category the most difficult mushrooms to classify and the ones to be most careful when ingesting. These discoveries illustrate the reasons behind the perfect success rates for classification. I was unable to find a third predictor to rule out all ambiguities surrounding white spore print odorless mushrooms. The study also suggest that mushroom colonies have some type of hive/swarm intelligence. What do you think? 
+
+# References
+
+UC Irvine Machine Learning Repository: http://archive.ics.uci.edu/ml/index.php
+
+TIDYVERSE (On ggplot2 geom_jitter plotting): http://ggplot2.tidyverse.org/reference/geom_jitter.html
+
+Caret Package Documentation: https://cran.r-project.org/web/packages/caret/caret.pdf
+
+
+
